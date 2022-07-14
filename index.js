@@ -6,9 +6,12 @@ import mongoose from "mongoose";
 import { registerValidation } from "./validation/auth.js";
 import UserSchema from "./models/User.js";
 
-const app = express();
+const PORT = 3000;
+const key = "secret";
 const url =
     "mongodb+srv://admin:root@cluster0.zzk45xw.mongodb.net/body?retryWrites=true&w=majority";
+
+const app = express();
 
 mongoose
     .connect(url)
@@ -19,29 +22,48 @@ mongoose
 app.use(express.json());
 
 app.get("/", (req, res) => {
-    res.send("test");
+    res.send("works");
 });
 
 app.post("/auth/register", registerValidation, async (req, res) => {
-    const errors = validationResult(req);
+    try {
+        const errors = validationResult(req);
 
-    const pass = req.body.password;
-    const salt = await bcrypt.genSalt(10);
+        // if not validate (pattern registarValidation)
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ validate: false, ...errors.array() });
+        }
 
-    const passwordHash = await bcrypt.hash(pass, salt);
-    const doc = new UserSchema({
-        name: req.body.name,
-        username: req.body.username,
-        email: req.body.email,
-        avatarUrl: req.body.avaratUrl,
-        passwordHash,
-    });
+        // crypt password
+        const pass = req.body.password;
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(pass, salt);
 
-    const user = await doc.save();
+        // create new user in base
+        const doc = new UserSchema({
+            name: req.body.name,
+            username: req.body.username,
+            email: req.body.email,
+            avatarUrl: req.body.avaratUrl,
+            passwordHash,
+        });
+        const user = await doc.save();
 
-    return !errors.isEmpty()
-        ? res.status(400).json(errors.array())
-        : res.json(doc);
+        const token = jwt.sign(
+            {
+                _id: user._id,
+            },
+            key
+        );
+
+        // log created user
+        res.json({ ...user._doc, token });
+    } catch (e) {
+        console.log(e);
+        res.status(500).json({
+            message: "register error",
+        });
+    }
 });
 
-app.listen(1488, (e) => (e ? console.log(e) : console.log("SUCCESS")));
+app.listen(PORT, (e) => (e ? console.log(e) : console.log("SUCCESS")));
